@@ -32,3 +32,8 @@ python: can't open file '/home/runner/work/Auto-deploy-sap-and-keepalive/Auto-de
 python: can't open file '/home/runner/work/Auto-deploy-sap-and-keepalive/Auto-deploy-sap-and-keepalive/main.py': [Errno 2] No such file or directory
 ===== RUN Sun Apr 19 10:59:38 UTC 2026 =====
 python: can't open file '/home/runner/work/Auto-deploy-sap-and-keepalive/Auto-deploy-sap-and-keepalive/main.py': [Errno 2] No such file or directory
+===== RUN Sun Apr 19 11:14:17 UTC 2026 =====
+[2026-04-19 11:14:18 UTC] [INFO] ===== SOP V2.1 BOT 启动 =====
+[INFO] 时间偏移: -96 ms
+[2026-04-19 11:14:18 UTC] [ERROR] API 错误: Timestamp request expired (code: 50102)
+[2026-04-19 11:14:18 UTC] [ERROR] 获取余额失败
