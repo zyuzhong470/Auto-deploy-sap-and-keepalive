@@ -1,142 +1,110 @@
 import time
-import os
-import json
-import requests
-import base64
 import hmac
 import hashlib
-from datetime import datetime
+import base64
+import requests
+import json
 
 # =========================
-# 🔐 API CONFIG
+# ⚙️ CONFIG
 # =========================
-API_KEY = os.getenv("OKX_API_KEY", "").strip()
-SECRET_KEY = os.getenv("OKX_SECRET_KEY", "").strip()
-PASSPHRASE = os.getenv("OKX_PASSPHRASE", "").strip()
-
 BASE_URL = "https://www.okx.com"
 
-# =========================
-# 📁 日志目录
-# =========================
-LOG_DIR = "logs"
-os.makedirs(LOG_DIR, exist_ok=True)
-
-LOG_FILE = f"{LOG_DIR}/log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
 # =========================
-# 🧾 日志函数（文件 + 控制台）
+# ⏱️ 时间戳（稳定版）
 # =========================
-def log(msg):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{timestamp}] {msg}"
+def get_timestamp():
+    return str(int(time.time() * 1000))
 
-    print(line)
-
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(line + "\n")
-
-# =========================
-# 🔒 执行锁
-# =========================
-LOCK_FILE = "run.lock"
-
-def acquire_lock():
-    if os.path.exists(LOCK_FILE):
-        log("⚠️ 任务已在运行，退出防重复执行")
-        return False
-
-    with open(LOCK_FILE, "w") as f:
-        f.write(str(time.time()))
-
-    return True
-
-def release_lock():
-    if os.path.exists(LOCK_FILE):
-        os.remove(LOCK_FILE)
 
 # =========================
 # 🔐 签名
 # =========================
-def sign(timestamp, method, path, body=""):
-    msg = f"{timestamp}{method}{path}{body}"
+def sign_okx(timestamp, method, path, body, secret):
+    message = f"{timestamp}{method}{path}{body}"
+
     mac = hmac.new(
-        SECRET_KEY.encode(),
-        msg.encode(),
+        secret.encode("utf-8"),
+        message.encode("utf-8"),
         hashlib.sha256
     )
+
     return base64.b64encode(mac.digest()).decode()
 
+
 # =========================
-# 📦 headers
+# 🌐 请求核心（稳定版）
 # =========================
-def get_headers(method, path, body=""):
-    ts = str(time.time())
-    body_str = json.dumps(body) if body else ""
+def okx_request(api_key, secret, passphrase, method, path, body=""):
+    url = BASE_URL + path
+
+    timestamp = get_timestamp()
+    sign = sign_okx(timestamp, method, path, body, secret)
 
     headers = {
-        "OK-ACCESS-KEY": API_KEY,
-        "OK-ACCESS-SIGN": sign(ts, method, path, body_str),
-        "OK-ACCESS-TIMESTAMP": ts,
-        "OK-ACCESS-PASSPHRASE": PASSPHRASE,
-        "Content-Type": "application/json",
-        "User-Agent": "SOP-OKX-V2.1"
+        "OK-ACCESS-KEY": api_key,
+        "OK-ACCESS-SIGN": sign,
+        "OK-ACCESS-TIMESTAMP": timestamp,
+        "OK-ACCESS-PASSPHRASE": passphrase,
+        "Content-Type": "application/json"
     }
-
-    return headers, body_str
-
-# =========================
-# 🌐 请求
-# =========================
-def request(method, path, body=None):
-    url = BASE_URL + path
-    headers, body_str = get_headers(method, path, body)
 
     try:
         if method == "GET":
-            res = requests.get(url, headers=headers, timeout=10)
+            r = requests.get(url, headers=headers, timeout=10)
         else:
-            res = requests.post(url, headers=headers, data=body_str, timeout=10)
-
-        log(f"HTTP {res.status_code}")
+            r = requests.post(url, headers=headers, data=body, timeout=10)
 
         try:
-            data = res.json()
-            log(f"RESPONSE: {data}")
+            data = r.json()
         except:
-            log("RESPONSE decode failed")
+            return False, {"error": "invalid json"}
 
-        return res.json()
+        if r.status_code != 200:
+            return False, data
+
+        if data.get("code") != "0":
+            return False, data
+
+        return True, data
 
     except Exception as e:
-        log(f"ERROR: {str(e)}")
-        return None
+        return False, {"error": str(e)}
+
 
 # =========================
-# 📊 示例接口
+# 🔁 自动重试
 # =========================
-def get_balance():
-    return request("GET", "/api/v5/account/balance")
+def safe_request(api_key, secret, passphrase, method, path, body="", retry=3):
+    for i in range(retry):
+        ok, res = okx_request(api_key, secret, passphrase, method, path, body)
+
+        if ok:
+            return True, res
+
+        print(f"[RETRY {i+1}] {res}")
+        time.sleep(1.5)
+
+    return False, res
+
 
 # =========================
-# 🚀 主程序
+# 📊 示例：账户余额
 # =========================
 if __name__ == "__main__":
 
-    log("🚀 START SOP V2.1 BOT")
+    API_KEY = "YOUR_API_KEY"
+    SECRET = "YOUR_SECRET"
+    PASSPHRASE = "YOUR_PASSPHRASE"
 
-    if not acquire_lock():
-        exit()
+    ok, data = safe_request(
+        API_KEY,
+        SECRET,
+        PASSPHRASE,
+        "GET",
+        "/api/v5/account/balance"
+    )
 
-    try:
-        get_balance()
-        log("✅ EXECUTION SUCCESS")
-
-    except Exception as e:
-        log(f"❌ FATAL ERROR: {str(e)}")
-
-    finally:
-        release_lock()
-        log("🔓 LOCK RELEASED")
-        log(f"📁 LOG SAVED: {LOG_FILE}")
-
+    print("RESULT:", ok)
+    print(json.dumps(data, indent=2))
