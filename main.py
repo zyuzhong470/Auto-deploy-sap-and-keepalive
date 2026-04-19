@@ -6,7 +6,6 @@ import time
 import hmac
 import hashlib
 import base64
-import json
 import requests
 from datetime import datetime
 
@@ -81,7 +80,6 @@ def get_account_balance():
         result = resp.json()
         
         if resp.status_code == 200 and result.get("code") == "0":
-            # 提取 USDT 余额
             for detail in result['data'][0]['details']:
                 if detail['ccy'] == 'USDT':
                     avail = detail.get('availBal', '0')
@@ -126,8 +124,6 @@ def run_bot():
     log_message(f"✅ 执行成功，USDT 余额: {balance}")
     return True
 
-# ================== 入口 ==================
 if __name__ == "__main__":
     success = run_bot()
-    # 返回退出码（GitHub Actions 可以根据退出码判断成功/失败）
     exit(0 if success else 1)
