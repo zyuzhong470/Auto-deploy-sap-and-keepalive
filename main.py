@@ -1,140 +1,161 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-import os
 import time
 import hmac
 import hashlib
-import base64
 import requests
-from datetime import datetime
+import json
+import os
 
-# ================== 配置 ==================
+# =========================
+# 🔐 API CONFIG
+# =========================
 API_KEY = os.getenv("OKX_API_KEY")
-SECRET_KEY = os.getenv("OKX_SECRET_KEY")
-PASSPHRASE = os.getenv("OKX_PASSPHRASE")
+API_SECRET = os.getenv("OKX_API_SECRET")
+API_PASSPHRASE = os.getenv("OKX_API_PASSPHRASE")
+
 BASE_URL = "https://www.okx.com"
 
-# 全局时间偏移（毫秒）
+# =========================
+# 🧠 GLOBAL TIME OFFSET
+# =========================
 TIME_OFFSET = 0
 
-# ================== 工具函数 ==================
-def get_server_time_offset():
-    """获取本地时间与OKX服务器时间的差值（毫秒）"""
-    try:
-        url = f"{BASE_URL}/api/v5/public/time"
-        resp = requests.get(url, timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            server_ts = int(data['data'][0]['ts'])
-            local_ts = int(time.time() * 1000)
-            offset = server_ts - local_ts
-            print(f"[INFO] 时间偏移: {offset} ms")
-            return offset
-        else:
-            print("[WARN] 获取服务器时间失败，使用本地时间")
-            return 0
-    except Exception as e:
-        print(f"[WARN] 时间同步异常: {e}，使用本地时间")
-        return 0
+# =========================
+# 🧠 LOG SYSTEM
+# =========================
+def log(msg):
+    t = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    print(f"[{t}] {msg}")
 
-def get_timestamp():
-    """生成带偏移的时间戳"""
-    return str(int(time.time() * 1000) + TIME_OFFSET)
-
-def sign(timestamp, method, request_path, body=""):
-    """生成签名"""
-    message = f"{timestamp}{method}{request_path}{body}"
-    mac = hmac.new(
-        SECRET_KEY.encode(),
-        message.encode(),
-        hashlib.sha256
-    ).digest()
-    return base64.b64encode(mac).decode()
-
-def get_headers(method, path, body=""):
-    """构造请求头"""
-    ts = get_timestamp()
-    return {
-        "OK-ACCESS-KEY": API_KEY,
-        "OK-ACCESS-SIGN": sign(ts, method, path, body),
-        "OK-ACCESS-TIMESTAMP": ts,
-        "OK-ACCESS-PASSPHRASE": PASSPHRASE,
-        "Content-Type": "application/json"
-    }
-
-def log_message(msg, level="INFO"):
-    """输出带时间戳的日志"""
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-    print(f"[{timestamp}] [{level}] {msg}")
-
-# ================== 核心业务 ==================
-def get_account_balance():
-    """获取账户余额（USDT）"""
-    path = "/api/v5/account/balance"
-    url = BASE_URL + path
-    headers = get_headers("GET", path)
-    
-    # 调试：打印发送的时间戳和服务器时间对比
-    ts_sent = headers["OK-ACCESS-TIMESTAMP"]
-    try:
-        time_resp = requests.get(f"{BASE_URL}/api/v5/public/time", timeout=3)
-        server_ts = time_resp.json()['data'][0]['ts']
-        log_message(f"发送时间戳: {ts_sent}, 服务器时间戳: {server_ts}")
-        diff = int(server_ts) - int(ts_sent)
-        log_message(f"时间差: {diff} ms")
-    except:
-        pass
-
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        result = resp.json()
-        
-        if resp.status_code == 200 and result.get("code") == "0":
-            for detail in result['data'][0]['details']:
-                if detail['ccy'] == 'USDT':
-                    avail = detail.get('availBal', '0')
-                    log_message(f"USDT 可用余额: {avail}")
-                    return float(avail)
-            log_message("未找到 USDT 余额")
-            return 0.0
-        else:
-            error_msg = result.get('msg', 'Unknown error')
-            log_message(f"API 错误: {error_msg} (code: {result.get('code')})", "ERROR")
-            return None
-    except Exception as e:
-        log_message(f"请求异常: {e}", "ERROR")
-        return None
-
-def run_bot():
-    """主流程"""
-    log_message("===== SOP V2.1 BOT 启动 =====")
-    
-    # 1. 检查环境变量
-    missing = []
-    if not API_KEY:
-        missing.append("OKX_API_KEY")
-    if not SECRET_KEY:
-        missing.append("OKX_SECRET_KEY")
-    if not PASSPHRASE:
-        missing.append("OKX_PASSPHRASE")
-    if missing:
-        log_message(f"缺少环境变量: {', '.join(missing)}", "ERROR")
-        return False
-    
-    # 2. 同步服务器时间
+# =========================
+# 🧠 TIME SYNC (OKX 返回毫秒时间戳)
+# =========================
+def sync_time():
     global TIME_OFFSET
-    TIME_OFFSET = get_server_time_offset()
-    
-    # 3. 获取余额
-    balance = get_account_balance()
-    if balance is None:
-        log_message("获取余额失败", "ERROR")
-        return False
-    
-    log_message(f"✅ 执行成功，USDT 余额: {balance}")
-    return True
+    try:
+        res = requests.get(f"{BASE_URL}/api/v5/public/time", timeout=5).json()
+        # OKX 返回的 ts 是毫秒时间戳字符串
+        server_ts_ms = int(res['data'][0]['ts'])
+        local_ts_ms = int(time.time() * 1000)
+        TIME_OFFSET = (server_ts_ms - local_ts_ms) / 1000.0
+        log(f"⏱ 时间同步成功 OFFSET={TIME_OFFSET:.3f}s")
+    except Exception as e:
+        log(f"❌ 时间同步失败: {e}")
 
+def get_timestamp_ms():
+    """返回带偏移的毫秒时间戳 (OKX 要求 ISO 格式，但签名用的是毫秒字符串)"""
+    return str(int((time.time() + TIME_OFFSET) * 1000))
+
+# =========================
+# 🔐 OKX 签名
+# =========================
+def sign(timestamp, method, request_path, body):
+    # 拼接：timestamp + method + requestPath + body (GET 时 body 为空字符串)
+    message = timestamp + method.upper() + request_path + body
+    mac = hmac.new(
+        bytes(API_SECRET, encoding='utf8'),
+        bytes(message, encoding='utf-8'),
+        hashlib.sha256
+    )
+    return mac.hexdigest()
+
+# =========================
+# 🚀 REQUEST (带重试)
+# =========================
+def request(method, endpoint, params=None):
+    """
+    method: "GET" 或 "POST"
+    endpoint: API 路径，如 "/api/v5/account/balance"
+    params: 对于 GET 为 dict (查询参数)，对于 POST 为 dict (请求体)
+    """
+    for i in range(3):
+        try:
+            timestamp = get_timestamp_ms()  # 毫秒字符串
+
+            # 处理请求路径和 body
+            request_path = endpoint
+            body = ""
+
+            if method == "GET":
+                if params:
+                    # 将参数按 key 排序并拼接到 URL
+                    sorted_keys = sorted(params.keys())
+                    query = "&".join([f"{k}={params[k]}" for k in sorted_keys])
+                    request_path = f"{endpoint}?{query}"
+                # GET 请求 body 为空字符串
+                body = ""
+                url = BASE_URL + request_path
+                response = requests.get(url, timeout=5)
+            else:  # POST
+                body = json.dumps(params) if params else ""
+                url = BASE_URL + endpoint
+                headers = {
+                    "Content-Type": "application/json"
+                }
+                response = requests.post(url, headers=headers, data=body, timeout=5)
+
+            # 构造签名
+            sign_str = sign(timestamp, method, request_path, body)
+
+            # 请求头
+            headers = {
+                "OK-ACCESS-KEY": API_KEY,
+                "OK-ACCESS-SIGN": sign_str,
+                "OK-ACCESS-TIMESTAMP": timestamp,
+                "OK-ACCESS-PASSPHRASE": API_PASSPHRASE,
+            }
+            if method == "POST":
+                headers["Content-Type"] = "application/json"
+
+            # 重新发送带正确签名的请求
+            if method == "GET":
+                r = requests.get(url, headers=headers, timeout=5)
+            else:
+                r = requests.post(url, headers=headers, data=body, timeout=5)
+
+            data = r.json()
+
+            # OKX 返回码：code 为 "0" 表示成功
+            if data.get("code") == "0":
+                return data
+            else:
+                log(f"⚠️ API错误: {data}")
+                time.sleep(1)
+
+        except Exception as e:
+            log(f"❌ 请求失败(第{i+1}次): {e}")
+            time.sleep(1)
+
+    return None
+
+# =========================
+# 🧪 测试：账户余额 (统一账户)
+# =========================
+def get_balance():
+    endpoint = "/api/v5/account/balance"
+    # OKX 余额接口可选参数 ccy，不传则返回所有币种
+    params = None   # 或 {"ccy": "USDT"} 指定币种
+    return request("GET", endpoint, params)
+
+# =========================
+# 🚀 MAIN
+# =========================
 if __name__ == "__main__":
-    success = run_bot()
-    exit(0 if success else 1)
+    log("🚀 启动 OKX 稳定版 v1")
+
+    # 检查必要环境变量
+    if not API_KEY or not API_SECRET or not API_PASSPHRASE:
+        log("❌ 请设置环境变量 OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE")
+        exit(1)
+
+    sync_time()  # 启动时同步一次
+
+    while True:
+        res = get_balance()
+
+        if res:
+            log("✅ 获取余额成功")
+            print(json.dumps(res, indent=2))
+        else:
+            log("❌ 获取失败")
+
+        time.sleep(30)
