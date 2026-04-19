@@ -139,3 +139,4 @@ if __name__ == "__main__":
         release_lock()
         log("🔓 LOCK RELEASED")
         log(f"📁 LOG SAVED: {LOG_FILE}")
+
