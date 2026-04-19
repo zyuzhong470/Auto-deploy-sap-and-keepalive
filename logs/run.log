@@ -59,3 +59,6 @@ python: can't open file '/home/runner/work/Auto-deploy-sap-and-keepalive/Auto-de
 ===== RUN Sun Apr 19 14:30:34 UTC 2026 =====
 [2026-04-19 14:30:35] 🚀 启动 OKX 稳定版 v1
 [2026-04-19 14:30:35] ❌ 请设置环境变量 OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE
+===== RUN Sun Apr 19 15:21:52 UTC 2026 =====
+[2026-04-19 15:21:53] 🚀 启动 OKX 稳定版 v1
+[2026-04-19 15:21:53] ❌ 请设置环境变量 OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE
