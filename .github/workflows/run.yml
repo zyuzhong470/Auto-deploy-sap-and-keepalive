@@ -2,35 +2,72 @@ name: SOP-OKX-Auto-Run
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # 每5分钟执行一次
-  workflow_dispatch:        # 手动触发按钮
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ 拉取代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ 安装 Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      # 3️⃣ 安装依赖
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
-      # 4️⃣ 运行交易脚本
-      - name: Run OKX Bot
+      # =========================
+      # 📦 1. 运行 bot 并保存输出
+      # =========================
+      - name: Run OKX Bot and Capture Log
         env:
           OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
           OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
           OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
         run: |
-          python main.py
+          mkdir -p logs
+          python main.py | tee logs/run.log
+
+      # =========================
+      # 📦 2. 生成结构化日志 JSON
+      # =========================
+      - name: Build Log JSON
+        run: |
+          python - << 'EOF'
+          import json, datetime, os
+
+          log_file = "logs/run.log"
+
+          if os.path.exists(log_file):
+              with open(log_file, "r") as f:
+                  content = f.read()
+          else:
+              content = "NO LOG"
+
+          log_data = {
+              "time": datetime.datetime.utcnow().isoformat() + "Z",
+              "log": content[-2000:],  # 只保留最后2000字符
+          }
+
+          with open("logs/log.json", "a") as f:
+              f.write(json.dumps(log_data) + "\n")
+          EOF
+
+      # =========================
+      # 📦 3. 提交日志到仓库
+      # =========================
+      - name: Commit Logs
+        run: |
+          git config user.name "log-bot"
+          git config user.email "log@bot.com"
+
+          git add logs/log.json logs/run.log
+          git commit -m "log update $(date -u)" || echo "no changes"
+          git push
