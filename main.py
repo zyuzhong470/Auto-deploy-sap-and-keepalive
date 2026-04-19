@@ -3,108 +3,73 @@ import hmac
 import hashlib
 import base64
 import requests
-import json
+from datetime import datetime, timezone
+import os
 
 # =========================
-# ⚙️ CONFIG
+# 🔐 从环境变量读取（GitHub/VPS用）
 # =========================
+API_KEY = os.environ.get("OKX_API_KEY")
+SECRET_KEY = os.environ.get("OKX_SECRET_KEY")
+PASSPHRASE = os.environ.get("OKX_PASSPHRASE")
+
 BASE_URL = "https://www.okx.com"
 
-
 # =========================
-# ⏱️ 时间戳（稳定版）
+# ⏱ 正确UTC时间戳（关键）
 # =========================
 def get_timestamp():
-    return str(int(time.time() * 1000))
-
+    return datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
 
 # =========================
-# 🔐 签名
+# 🔐 OKX签名生成
 # =========================
-def sign_okx(timestamp, method, path, body, secret):
-    message = f"{timestamp}{method}{path}{body}"
-
+def sign(message, secret):
     mac = hmac.new(
-        secret.encode("utf-8"),
-        message.encode("utf-8"),
-        hashlib.sha256
+        bytes(secret, encoding='utf-8'),
+        bytes(message, encoding='utf-8'),
+        digestmod=hashlib.sha256
     )
-
     return base64.b64encode(mac.digest()).decode()
 
-
 # =========================
-# 🌐 请求核心（稳定版）
+# 🧪 测试 API（public endpoint）
 # =========================
-def okx_request(api_key, secret, passphrase, method, path, body=""):
-    url = BASE_URL + path
+def test_api():
+    if not API_KEY or not SECRET_KEY or not PASSPHRASE:
+        print("❌ API Key / Secret / Passphrase 未加载")
+        return
 
     timestamp = get_timestamp()
-    sign = sign_okx(timestamp, method, path, body, secret)
+
+    method = "GET"
+    request_path = "/api/v5/account/balance"
+    body = ""
+
+    prehash = timestamp + method + request_path + body
+    signature = sign(prehash, SECRET_KEY)
 
     headers = {
-        "OK-ACCESS-KEY": api_key,
-        "OK-ACCESS-SIGN": sign,
+        "OK-ACCESS-KEY": API_KEY,
+        "OK-ACCESS-SIGN": signature,
         "OK-ACCESS-TIMESTAMP": timestamp,
-        "OK-ACCESS-PASSPHRASE": passphrase,
+        "OK-ACCESS-PASSPHRASE": PASSPHRASE,
         "Content-Type": "application/json"
     }
 
+    url = BASE_URL + request_path
+
     try:
-        if method == "GET":
-            r = requests.get(url, headers=headers, timeout=10)
-        else:
-            r = requests.post(url, headers=headers, data=body, timeout=10)
-
-        try:
-            data = r.json()
-        except:
-            return False, {"error": "invalid json"}
-
-        if r.status_code != 200:
-            return False, data
-
-        if data.get("code") != "0":
-            return False, data
-
-        return True, data
-
+        response = requests.get(url, headers=headers, timeout=10)
+        print("STATUS:", response.status_code)
+        print("RESPONSE:", response.json())
     except Exception as e:
-        return False, {"error": str(e)}
-
-
-# =========================
-# 🔁 自动重试
-# =========================
-def safe_request(api_key, secret, passphrase, method, path, body="", retry=3):
-    for i in range(retry):
-        ok, res = okx_request(api_key, secret, passphrase, method, path, body)
-
-        if ok:
-            return True, res
-
-        print(f"[RETRY {i+1}] {res}")
-        time.sleep(1.5)
-
-    return False, res
-
+        print("❌ 请求失败:", str(e))
 
 # =========================
-# 📊 示例：账户余额
+# 🚀 运行
 # =========================
 if __name__ == "__main__":
-
-    API_KEY = "YOUR_API_KEY"
-    SECRET = "YOUR_SECRET"
-    PASSPHRASE = "YOUR_PASSPHRASE"
-
-    ok, data = safe_request(
-        API_KEY,
-        SECRET,
-        PASSPHRASE,
-        "GET",
-        "/api/v5/account/balance"
-    )
-
-    print("RESULT:", ok)
-    print(json.dumps(data, indent=2))
+    print("===== OKX AUTH TEST START =====")
+    test_api()
+    print("===== TEST END =====")
