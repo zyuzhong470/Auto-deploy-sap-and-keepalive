@@ -1,50 +1,56 @@
 import time
-import os
 import hmac
-import hashlib
 import base64
+import hashlib
 import requests
-from datetime import datetime
+import json
 
-# =========================
-# 🔐 ENV 安全读取
-# =========================
-def load_env(key):
-    value = os.environ.get(key)
-    if not value or value.strip() == "":
-        raise Exception(f"[CRITICAL] Missing ENV: {key}")
-    return value.strip()
+# ======================
+# 🔐 填你的 API
+# ======================
+API_KEY = "你的API_KEY"
+API_SECRET = "你的API_SECRET"
+PASSPHRASE = "你的PASSPHRASE"
 
-API_KEY = load_env("OKX_API_KEY")
-SECRET_KEY = load_env("OKX_SECRET_KEY")
-PASSPHRASE = load_env("OKX_PASSPHRASE")
+BASE_URL = "https://www.okx.com"
 
-# =========================
-# ⏱️ 时间戳稳定层
-# =========================
-def okx_timestamp():
-    return str(int(time.time() * 1000))
+# ======================
+# ⏱ 时间同步（关键修复）
+# ======================
+def get_okx_time():
+    try:
+        url = BASE_URL + "/api/v5/public/time"
+        res = requests.get(url, timeout=5).json()
+        return res["data"][0]["ts"]  # 毫秒时间戳（字符串）
+    except:
+        return str(int(time.time() * 1000))
 
-# =========================
-# 🔐 签名生成
-# =========================
-def sign(message):
+
+# ======================
+# 🔐 签名函数
+# ======================
+def sign(timestamp, method, request_path, body=""):
+    message = str(timestamp) + method + request_path + body
     mac = hmac.new(
-        bytes(SECRET_KEY, encoding="utf8"),
+        bytes(API_SECRET, encoding="utf-8"),
         bytes(message, encoding="utf-8"),
         digestmod=hashlib.sha256,
     )
     return base64.b64encode(mac.digest()).decode()
 
-# =========================
-# 📦 Header 构建
-# =========================
-def build_headers(method, path, body=""):
-    timestamp = okx_timestamp()
-    message = timestamp + method + path + body
-    signature = sign(message)
 
-    return {
+# ======================
+# 📡 API 请求测试
+# ======================
+def get_balance():
+    timestamp = get_okx_time()
+    method = "GET"
+    request_path = "/api/v5/account/balance"
+    body = ""
+
+    signature = sign(timestamp, method, request_path, body)
+
+    headers = {
         "OK-ACCESS-KEY": API_KEY,
         "OK-ACCESS-SIGN": signature,
         "OK-ACCESS-TIMESTAMP": timestamp,
@@ -52,68 +58,17 @@ def build_headers(method, path, body=""):
         "Content-Type": "application/json"
     }
 
-# =========================
-# 🔁 安全请求（重试机制）
-# =========================
-def safe_request(method, url, path, max_retry=3):
-    for i in range(max_retry):
-        try:
-            headers = build_headers(method, path)
+    url = BASE_URL + request_path
+    response = requests.get(url, headers=headers)
 
-            if method == "GET":
-                res = requests.get(url, headers=headers, timeout=10)
-            else:
-                res = requests.post(url, headers=headers, timeout=10)
+    print("===== OKX TEST START =====")
+    print("STATUS:", response.status_code)
+    print("RESPONSE:", response.json())
+    print("===== TEST END =====")
 
-            if res.status_code == 200:
-                return res.json()
 
-            print(f"[RETRY {i+1}] HTTP {res.status_code} {res.text}")
-
-        except Exception as e:
-            print(f"[RETRY {i+1}] ERROR {str(e)}")
-
-        time.sleep(2 ** i)
-
-    return None
-
-# =========================
-# 🧪 OKX 账户测试
-# =========================
-def test_okx():
-    print("===== OKX STABLE TEST START =====")
-
-    url = "https://www.okx.com/api/v5/account/balance"
-    path = "/api/v5/account/balance"
-
-    data = safe_request("GET", url, path)
-
-    if data and data.get("code") == "0":
-        print("✅ CONNECT SUCCESS")
-
-        balances = data["data"][0]["details"]
-        for b in balances:
-            if b["ccy"] in ["USDT", "SOL"]:
-                print(f"{b['ccy']}:", b["availBal"])
-
-        return True
-
-    print("❌ CONNECT FAILED")
-    print(data)
-    return False
-
-# =========================
-# 🚀 MAIN
-# =========================
+# ======================
+# 🚀 RUN
+# ======================
 if __name__ == "__main__":
-    try:
-        print("===== RUN =====")
-        print("TIME:", datetime.utcnow().isoformat())
-
-        ok = test_okx()
-
-        print("===== RESULT =====")
-        print(ok)
-
-    except Exception as e:
-        print("FATAL ERROR:", str(e))
+    get_balance()
