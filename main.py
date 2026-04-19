@@ -75,6 +75,17 @@ def get_account_balance():
     url = BASE_URL + path
     headers = get_headers("GET", path)
     
+    # 调试：打印发送的时间戳和服务器时间对比
+    ts_sent = headers["OK-ACCESS-TIMESTAMP"]
+    try:
+        time_resp = requests.get(f"{BASE_URL}/api/v5/public/time", timeout=3)
+        server_ts = time_resp.json()['data'][0]['ts']
+        log_message(f"发送时间戳: {ts_sent}, 服务器时间戳: {server_ts}")
+        diff = int(server_ts) - int(ts_sent)
+        log_message(f"时间差: {diff} ms")
+    except:
+        pass
+
     try:
         resp = requests.get(url, headers=headers, timeout=10)
         result = resp.json()
