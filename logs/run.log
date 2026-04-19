@@ -37,3 +37,10 @@ python: can't open file '/home/runner/work/Auto-deploy-sap-and-keepalive/Auto-de
 [INFO] 时间偏移: -96 ms
 [2026-04-19 11:14:18 UTC] [ERROR] API 错误: Timestamp request expired (code: 50102)
 [2026-04-19 11:14:18 UTC] [ERROR] 获取余额失败
+===== RUN Sun Apr 19 11:23:52 UTC 2026 =====
+[2026-04-19 11:23:52 UTC] [INFO] ===== SOP V2.1 BOT 启动 =====
+[INFO] 时间偏移: -119 ms
+[2026-04-19 11:23:53 UTC] [INFO] 发送时间戳: 1776597832966, 服务器时间戳: 1776597833220
+[2026-04-19 11:23:53 UTC] [INFO] 时间差: 254 ms
+[2026-04-19 11:23:53 UTC] [ERROR] API 错误: Timestamp request expired (code: 50102)
+[2026-04-19 11:23:53 UTC] [ERROR] 获取余额失败
