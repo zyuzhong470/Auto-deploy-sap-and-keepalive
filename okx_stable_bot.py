@@ -1,65 +1,119 @@
 import time
+import os
 import hmac
 import hashlib
 import base64
 import requests
+from datetime import datetime
 
 # =========================
-# 🔐 CONFIG
+# 🔐 ENV 安全读取
 # =========================
-API_KEY = "你的_API_KEY"
-SECRET_KEY = "你的_SECRET_KEY"
-PASSPHRASE = "你的_PASSPHRASE"
+def load_env(key):
+    value = os.environ.get(key)
+    if not value or value.strip() == "":
+        raise Exception(f"[CRITICAL] Missing ENV: {key}")
+    return value.strip()
 
-BASE_URL = "https://www.okx.com"
+API_KEY = load_env("OKX_API_KEY")
+SECRET_KEY = load_env("OKX_SECRET_KEY")
+PASSPHRASE = load_env("OKX_PASSPHRASE")
 
 # =========================
-# ⏱️ 统一时间源（核心修复）
+# ⏱️ 时间戳稳定层
 # =========================
-def get_okx_timestamp():
+def okx_timestamp():
     return str(int(time.time() * 1000))
 
 # =========================
-# ✍️ 签名函数
+# 🔐 签名生成
 # =========================
-def sign(timestamp, method, request_path, body=""):
-    message = timestamp + method + request_path + body
+def sign(message):
     mac = hmac.new(
-        bytes(SECRET_KEY, encoding="utf-8"),
+        bytes(SECRET_KEY, encoding="utf8"),
         bytes(message, encoding="utf-8"),
         digestmod=hashlib.sha256,
     )
     return base64.b64encode(mac.digest()).decode()
 
 # =========================
-# 📡 API 请求测试（账户余额）
+# 📦 Header 构建
 # =========================
-def test_account():
-    method = "GET"
-    request_path = "/api/v5/account/balance"
-    body = ""
+def build_headers(method, path, body=""):
+    timestamp = okx_timestamp()
+    message = timestamp + method + path + body
+    signature = sign(message)
 
-    timestamp = get_okx_timestamp()
-    signature = sign(timestamp, method, request_path, body)
-
-    headers = {
+    return {
         "OK-ACCESS-KEY": API_KEY,
         "OK-ACCESS-SIGN": signature,
         "OK-ACCESS-TIMESTAMP": timestamp,
         "OK-ACCESS-PASSPHRASE": PASSPHRASE,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
 
-    url = BASE_URL + request_path
-    response = requests.get(url, headers=headers)
+# =========================
+# 🔁 安全请求（重试机制）
+# =========================
+def safe_request(method, url, path, max_retry=3):
+    for i in range(max_retry):
+        try:
+            headers = build_headers(method, path)
 
-    print("STATUS:", response.status_code)
-    print("RESPONSE:", response.json())
+            if method == "GET":
+                res = requests.get(url, headers=headers, timeout=10)
+            else:
+                res = requests.post(url, headers=headers, timeout=10)
+
+            if res.status_code == 200:
+                return res.json()
+
+            print(f"[RETRY {i+1}] HTTP {res.status_code} {res.text}")
+
+        except Exception as e:
+            print(f"[RETRY {i+1}] ERROR {str(e)}")
+
+        time.sleep(2 ** i)
+
+    return None
 
 # =========================
-# 🚀 RUN
+# 🧪 OKX 账户测试
+# =========================
+def test_okx():
+    print("===== OKX STABLE TEST START =====")
+
+    url = "https://www.okx.com/api/v5/account/balance"
+    path = "/api/v5/account/balance"
+
+    data = safe_request("GET", url, path)
+
+    if data and data.get("code") == "0":
+        print("✅ CONNECT SUCCESS")
+
+        balances = data["data"][0]["details"]
+        for b in balances:
+            if b["ccy"] in ["USDT", "SOL"]:
+                print(f"{b['ccy']}:", b["availBal"])
+
+        return True
+
+    print("❌ CONNECT FAILED")
+    print(data)
+    return False
+
+# =========================
+# 🚀 MAIN
 # =========================
 if __name__ == "__main__":
-    print("===== OKX TIME FIX TEST START =====")
-    test_account()
-    print("===== TEST END =====")
+    try:
+        print("===== RUN =====")
+        print("TIME:", datetime.utcnow().isoformat())
+
+        ok = test_okx()
+
+        print("===== RESULT =====")
+        print(ok)
+
+    except Exception as e:
+        print("FATAL ERROR:", str(e))
