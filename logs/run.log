@@ -443,3 +443,6 @@ python: can't open file '/home/runner/work/Auto-deploy-sap-and-keepalive/Auto-de
 ===== RUN Sun Apr 26 16:08:39 UTC 2026 =====
 [2026-04-26 16:08:40] 🚀 启动 OKX 稳定版 v1
 [2026-04-26 16:08:40] ❌ 请设置环境变量 OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE
+===== RUN Sun Apr 26 17:03:27 UTC 2026 =====
+[2026-04-26 17:03:28] 🚀 启动 OKX 稳定版 v1
+[2026-04-26 17:03:28] ❌ 请设置环境变量 OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE
